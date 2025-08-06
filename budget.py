@@ -18,6 +18,10 @@ add_parser.add_argument("-t","--type",choices=["income","expense"],required=True
 #Set up list paser
 list_parser=subparsers.add_parser("list",help="List all budgets")
 list_parser.add_argument("-c","--category",)
+list_parser.add_argument("-f","--from",type=parse_date,help="From date")
+list_parser.add_argument("-t","--to",type=parse_date,help="To date")
+#Set up summary parser
+summary_parser=subparsers.add_parser("summary",help="Summarize a budget")
 
 args=parser.parse_args()
 
@@ -67,3 +71,12 @@ elif args.command=="list":
             for row in rows:
                 id, amount, category, note, date, entry_type = row
                 print(f"{id:<4}${amount:<8.2f}{category[:12]:<13}{note or '':<20}{date:<12}{entry_type}")
+
+elif args.command=="summary":
+    cursor.execute("SELECT SUM(amount) FROM entries WHERE type='income'")
+    net_income = cursor.fetchone()[0] or 0
+    cursor.execute("SELECT SUM(amount) FROM entries WHERE type='expense'")
+    net_expense = cursor.fetchone()[0] or 0
+    net_total = net_income - net_expense
+    print (f"Income    ${net_income:<8.2f}\nExpenses -${net_expense:<8.2f}")
+    print (f"Balance   ${net_total:<8.2f}")
