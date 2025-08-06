@@ -18,8 +18,8 @@ add_parser.add_argument("-t","--type",choices=["income","expense"],required=True
 #Set up list paser
 list_parser=subparsers.add_parser("list",help="List all budgets")
 list_parser.add_argument("-c","--category",)
-list_parser.add_argument("-f","--from",type=parse_date,help="From date")
-list_parser.add_argument("-t","--to",type=parse_date,help="To date")
+list_parser.add_argument("-f","--date_from",type=parse_date,help="From date")
+list_parser.add_argument("-t","--date_to",type=parse_date,help="To date")
 #Set up summary parser
 summary_parser=subparsers.add_parser("summary",help="Summarize a budget")
 
@@ -47,30 +47,33 @@ if args.command=="add":
     )
     conn.commit()
 elif args.command=="list":
-    if args.category is None:
-        cursor.execute("SELECT id, amount, category, note, date, type FROM entries ORDER BY date DESC")
-        rows = cursor.fetchall()
+    query = "SELECT id,amount, category, note, date, type FROM entries"
+    conditions=[]
+    params=[]
+    if args.category:
+        conditions.append("category=?")
+        params.append(args.category)
+    if args.date_from:
+        conditions.append("date>=?")
+        params.append(args.date_from)
+    if args.date_to:
+        conditions.append("date<=?")
+        params.append(args.date_to)
+    if conditions:
+        query+=" WHERE "+" AND ".join(conditions)
 
-        if not rows:
-            print("No entries found.")
-        else:
-            print(f"{'ID':<4}{'AMOUNT':<8}{'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
-            print("-"*60)
-            for row in rows:
-                id, amount, category, note, date , entry_type = row
-                print(f"{id:<4}${amount:<8.2f}{category[:12]:<13}{note or '':<20}{date:<12}{entry_type}")
+    cursor.execute(query,params)
+    rows = cursor.fetchall()
+
+
+    if not rows:
+        print("No entries found.")
     else:
-        cursor.execute("SELECT id, amount, category, note, date, type FROM entries WHERE category = ? ORDER BY date DESC", (args.category,))
-        rows = cursor.fetchall()
-
-        if not rows:
-            print("No entries found.")
-        else:
-            print(f"{'ID':<4}{'AMOUNT':<8}{'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
-            print("-" * 60)
-            for row in rows:
-                id, amount, category, note, date, entry_type = row
-                print(f"{id:<4}${amount:<8.2f}{category[:12]:<13}{note or '':<20}{date:<12}{entry_type}")
+        print(f"{'ID':<4}{'AMOUNT':<8}{'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
+        print("-" * 60)
+        for row in rows:
+            id, amount, category, note, date, entry_type = row
+            print(f"{id:<4}${amount:<8.2f}{category[:12]:<13}{note or '':<20}{date:<12}{entry_type}")
 
 elif args.command=="summary":
     cursor.execute("SELECT SUM(amount) FROM entries WHERE type='income'")
