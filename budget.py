@@ -5,8 +5,11 @@ from time import strptime, strftime
 
 
 def parse_date(date_str):
-    datetime.strptime(date_str, "%d.%m.%Y")
-    return to_iso(date_str)
+    try:
+        datetime.strptime(date_str, "%d.%m.%Y")
+        return to_iso(date_str)
+    except ValueError:
+        raise argparse.ArgumentTypeError("%s is not a valid date. dd.mm.yyyy is required" % date_str)
 
 def to_iso(date_str: str)->str:
     return datetime.strptime(date_str, "%d.%m.%Y").strftime("%Y-%m-%d")
