@@ -1,6 +1,8 @@
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 import sqlite3
+from time import strptime, strftime
+
 
 def parse_date(date_str):
     datetime.strptime(date_str, "%d.%m.%Y")
@@ -29,6 +31,8 @@ list_parser.add_argument("-dt","--date_to",type=parse_date,help="To date")
 list_parser.add_argument("-t","--type",choices=["income","expense"],help="income or expense")
 #Set up summary parser
 summary_parser=subparsers.add_parser("summary",help="Summarize a budget")
+summary_parser.add_argument("-m","--month",choices=range(1,13), type=int,help="Month to add")
+summary_parser.add_argument("-y","--year",type=int,help="Year to add")
 
 args=parser.parse_args()
 
@@ -87,14 +91,32 @@ elif args.command=="list":
             print(f"{id:<4}${amount:<8.2f}{category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
 
 elif args.command=="summary":
-    cursor.execute("SELECT SUM(amount) FROM entries WHERE type='income'")
+    if not args.year:
+        args.year = datetime.now().year
+    if not args.month:
+        args.month = datetime.now().month
+
+    start_date=datetime(args.year,args.month,1)
+    if args.month<12:
+        end_date=datetime(args.year,args.month+1,1)
+    elif args.month==12:
+        end_date=datetime(args.year+1,1,1)
+    start_date=start_date.strftime("%Y-%m-%d")
+    end_date=end_date.strftime("%Y-%m-%d")
+    date_filter="date>=? AND date<?"
+    date_params=[start_date,end_date]
+
+    query=f"SELECT SUM(amount) FROM entries WHERE {date_filter} AND type='income'"
+    cursor.execute(query,date_params)
     net_income = cursor.fetchone()[0] or 0
-    cursor.execute("SELECT SUM(amount) FROM entries WHERE type='expense'")
+    query=f"SELECT SUM(amount) FROM entries WHERE {date_filter} AND type='expense'"
+    cursor.execute(query,date_params)
     net_expense = cursor.fetchone()[0] or 0
     net_total = net_income - net_expense
     print (f"Income    ${net_income:<8.2f}\nExpenses -${net_expense:<8.2f}")
     print (f"Balance   ${net_total:<8.2f}")
-    cursor.execute("SELECT category, SUM(amount) FROM entries WHERE type='expense' GROUP BY category ORDER BY SUM(amount) DESC")
+    query=f"SELECT category, SUM(amount) FROM entries WHERE {date_filter} AND type='expense' GROUP BY category ORDER BY SUM(amount) DESC"
+    cursor.execute(query,date_params)
     rows = cursor.fetchall()
     if not rows:
         print("No entries found.")
