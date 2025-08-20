@@ -16,12 +16,18 @@ def to_iso(date_str: str)->str:
 
 def from_iso(date_str: str)->str:
     return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d.%m.%Y")
+
+def to_int( amount_str):
+    return int(round(float(amount_str)*100))
+
+def to_string(amount):
+    return f"{amount/100:.2f}"
 # set up paser
 parser=argparse.ArgumentParser(description="Track your budget from the command line")
 subparsers=parser.add_subparsers(dest="command")
 # Set up add paser
 add_parser=subparsers.add_parser("add",help="Add a budget to the database")
-add_parser.add_argument("--amount","-a",type=float,required=True,help="Amount to add")
+add_parser.add_argument("--amount","-a",type=to_int,required=True,help="Amount to add")
 add_parser.add_argument("--category","-c",type=str,required=True,help="Category to add")
 add_parser.add_argument("-n","--note",type=str,help="Note to add")
 add_parser.add_argument("-d","--date",type=parse_date,help="Date to add")
@@ -44,7 +50,7 @@ cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS entries (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
-amount REAL NOT NULL,
+amount INTEGER NOT NULL,
 category TEXT NOT NULL,
 note TEXT,
 date TEXT NOT NULL,
@@ -60,6 +66,7 @@ if args.command=="add":
         (args.amount, args.category, args.note, args.date, args.type)
     )
     conn.commit()
+
 elif args.command=="list":
     query = "SELECT id,amount, category, note, date, type FROM entries"
     conditions=[]
@@ -91,7 +98,7 @@ elif args.command=="list":
         print("-" * 60)
         for row in rows:
             id, amount, category, note, date, entry_type = row
-            print(f"{id:<4}${amount:<8.2f}{category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
+            print(f"{id:<4}${to_string(amount):<8}{category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
 
 elif args.command=="summary":
     if not args.year:
@@ -116,8 +123,8 @@ elif args.command=="summary":
     cursor.execute(query,date_params)
     net_expense = cursor.fetchone()[0] or 0
     net_total = net_income - net_expense
-    print (f"Income    ${net_income:<8.2f}\nExpenses -${net_expense:<8.2f}")
-    print (f"Balance   ${net_total:<8.2f}")
+    print (f"Income    ${to_string(net_income):<8}\nExpenses -${to_string(net_expense):<8}")
+    print (f"Balance   ${to_string(net_total):<8}")
     query=f"SELECT category, SUM(amount) FROM entries WHERE {date_filter} AND type='expense' GROUP BY category ORDER BY SUM(amount) DESC"
     cursor.execute(query,date_params)
     rows = cursor.fetchall()
@@ -125,4 +132,4 @@ elif args.command=="summary":
         print("No entries found.")
     else:
         for cat, total in rows:
-            print(f"{cat[:12]:<13}${total:<8.2f}")
+            print(f"{cat[:12]:<13}${to_string(total):<8}")
