@@ -21,7 +21,7 @@ def to_int( amount_str):
     return int(round(float(amount_str)*100))
 
 def to_string(amount):
-    return f"{amount/100:.2f}"
+    return f"${amount/100:>10,.2f}"
 # set up paser
 parser=argparse.ArgumentParser(description="Track your budget from the command line")
 subparsers=parser.add_subparsers(dest="command")
@@ -36,7 +36,7 @@ add_parser.add_argument("-t","--type",choices=["income","expense"],required=True
 list_parser=subparsers.add_parser("list",help="List all budgets")
 list_parser.add_argument("-c","--category",)
 list_parser.add_argument("-f","--date_from",type=parse_date,help="From date")
-list_parser.add_argument("-dt","--date_to",type=parse_date,help="To date")
+list_parser.add_argument("--date_to",type=parse_date,help="To date")
 list_parser.add_argument("-t","--type",choices=["income","expense"],help="income or expense")
 #Set up summary parser
 summary_parser=subparsers.add_parser("summary",help="Summarize a budget")
@@ -94,11 +94,11 @@ elif args.command=="list":
     if not rows:
         print("No entries found.")
     else:
-        print(f"{'ID':<4}{'AMOUNT':<8}{'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
-        print("-" * 60)
+        print(f"{'ID':<4}{'AMOUNT':<11} {'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
+        print("-" * 68)
         for row in rows:
             id, amount, category, note, date, entry_type = row
-            print(f"{id:<4}${to_string(amount):<8}{category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
+            print(f"{id:<4}{to_string(amount)} {category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
 
 elif args.command=="summary":
     if not args.year:
@@ -123,13 +123,17 @@ elif args.command=="summary":
     cursor.execute(query,date_params)
     net_expense = cursor.fetchone()[0] or 0
     net_total = net_income - net_expense
-    print (f"Income    ${to_string(net_income):<8}\nExpenses -${to_string(net_expense):<8}")
-    print (f"Balance   ${to_string(net_total):<8}")
+    print (f"{'INCOME':<13} {to_string(net_income)}\n{'EXPENSES':<13}-{to_string(net_expense)}")
+    print (f"{'BALANCE':<13} {to_string(net_total)}")
+
     query=f"SELECT category, SUM(amount) FROM entries WHERE {date_filter} AND type='expense' GROUP BY category ORDER BY SUM(amount) DESC"
     cursor.execute(query,date_params)
     rows = cursor.fetchall()
     if not rows:
         print("No entries found.")
     else:
+        print("_" * 60)
+        print(f"{'CATEGORY':<13}{'AMOUNT':<11}  ")
         for cat, total in rows:
-            print(f"{cat[:12]:<13}${to_string(total):<8}")
+
+            print(f"{cat[:12]:<13}{to_string(total)}")
