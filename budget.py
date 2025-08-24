@@ -1,7 +1,7 @@
 import argparse
-from datetime import datetime, timedelta
+from datetime import datetime
 import sqlite3
-from time import strptime, strftime
+
 
 
 def parse_date(date_str):
@@ -45,6 +45,10 @@ summary_parser.add_argument("-y","--year",type=int,help="Year to add")
 
 args=parser.parse_args()
 
+if args.command is None:
+    parser.print_help()
+    exit()
+
 conn = sqlite3.connect("budget.db")
 cursor = conn.cursor()
 cursor.execute("""
@@ -54,7 +58,7 @@ amount INTEGER NOT NULL,
 category TEXT NOT NULL,
 note TEXT,
 date TEXT NOT NULL,
-type Text NOT NULL
+type TEXT NOT NULL
 )
 """)
 
@@ -66,6 +70,7 @@ if args.command=="add":
         (args.amount, args.category, args.note, args.date, args.type)
     )
     conn.commit()
+    conn.close()
 
 elif args.command=="list":
     query = "SELECT id,amount, category, note, date, type FROM entries"
@@ -97,8 +102,13 @@ elif args.command=="list":
         print(f"{'ID':<4}{'AMOUNT':<11} {'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
         print("-" * 68)
         for row in rows:
+
             id, amount, category, note, date, entry_type = row
-            print(f"{id:<4}{to_string(amount)} {category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
+
+            signed_amount = -amount if entry_type =="expense" else amount
+            typed_amount =to_string(signed_amount)
+            print(f"{id:<4}{typed_amount} {category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
+    conn.close()
 
 elif args.command=="summary":
     if not args.year:
@@ -123,7 +133,7 @@ elif args.command=="summary":
     cursor.execute(query,date_params)
     net_expense = cursor.fetchone()[0] or 0
     net_total = net_income - net_expense
-    print (f"{'INCOME':<13} {to_string(net_income)}\n{'EXPENSES':<13}-{to_string(net_expense)}")
+    print (f"{'INCOME':<13} {to_string(net_income)}\n{'EXPENSES':<13} {to_string(-net_expense)}")
     print (f"{'BALANCE':<13} {to_string(net_total)}")
 
     query=f"SELECT category, SUM(amount) FROM entries WHERE {date_filter} AND type='expense' GROUP BY category ORDER BY SUM(amount) DESC"
@@ -137,3 +147,4 @@ elif args.command=="summary":
         for cat, total in rows:
 
             print(f"{cat[:12]:<13}{to_string(total)}")
+    conn.close()
