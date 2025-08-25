@@ -20,8 +20,11 @@ def from_iso(date_str: str)->str:
 def to_int( amount_str):
     return int(round(float(amount_str)*100))
 
-def to_string(amount):
-    return f"${amount/100:>10,.2f}"
+def to_string(amount,entry_type):
+    if entry_type == "income":
+        return f" ${amount/100:>10,.2f}"
+    elif entry_type == "expense":
+        return f"-${abs(amount)/100:>10,.2f}"
 # set up paser
 parser=argparse.ArgumentParser(description="Track your budget from the command line")
 subparsers=parser.add_subparsers(dest="command")
@@ -99,15 +102,15 @@ elif args.command=="list":
     if not rows:
         print("No entries found.")
     else:
-        print(f"{'ID':<4}{'AMOUNT':<11} {'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
+        print(f"{'ID':<4}{' AMOUNT':<12} {'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
         print("-" * 68)
         for row in rows:
 
             id, amount, category, note, date, entry_type = row
 
-            signed_amount = -amount if entry_type =="expense" else amount
-            typed_amount =to_string(signed_amount)
-            print(f"{id:<4}{typed_amount} {category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
+
+
+            print(f"{id:<4}{to_string(amount,entry_type)} {category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
     conn.close()
 
 elif args.command=="summary":
@@ -121,6 +124,7 @@ elif args.command=="summary":
         end_date=datetime(args.year,args.month+1,1)
     elif args.month==12:
         end_date=datetime(args.year+1,1,1)
+    summary_month = start_date.strftime("%B %Y")
     start_date=start_date.strftime("%Y-%m-%d")
     end_date=end_date.strftime("%Y-%m-%d")
     date_filter="date>=? AND date<?"
@@ -133,8 +137,20 @@ elif args.command=="summary":
     cursor.execute(query,date_params)
     net_expense = cursor.fetchone()[0] or 0
     net_total = net_income - net_expense
-    print (f"{'INCOME':<13} {to_string(net_income)}\n{'EXPENSES':<13} {to_string(-net_expense)}")
-    print (f"{'BALANCE':<13} {to_string(net_total)}")
+    if net_total >=0:
+        entry_type='income'
+    elif net_total < 0:
+        entry_type='expense'
+# expense set to income to display as positive by convention
+    print("\n")
+    title=f"SUMMARY - {summary_month}"
+    length=len(title)
+
+    print (title)
+    print("-" * length+ "\n")
+
+    print (f"{'INCOME':<13}{to_string(net_income,'income')}\n{'EXPENSES':<13}{to_string(net_expense,'income')}")
+    print (f"{'BALANCE':<13}{to_string(net_total,entry_type)}")
 
     query=f"SELECT category, SUM(amount) FROM entries WHERE {date_filter} AND type='expense' GROUP BY category ORDER BY SUM(amount) DESC"
     cursor.execute(query,date_params)
@@ -142,9 +158,13 @@ elif args.command=="summary":
     if not rows:
         print("No entries found.")
     else:
-        print("_" * 60)
-        print(f"{'CATEGORY':<13}{'AMOUNT':<11}  ")
+        print("-" * 25)
+        print("EXPENSES \n")
+
+        print(f"{'CATEGORY':<13}{' AMOUNT':<12}  ")
+        print("-"*25)
         for cat, total in rows:
 
-            print(f"{cat[:12]:<13}{to_string(total)}")
+
+            print(f"{cat[:12]:<13}{to_string(total,'income')}")
     conn.close()
