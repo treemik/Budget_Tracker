@@ -4,6 +4,7 @@ import sqlite3
 
 
 
+
 def parse_date(date_str):
     try:
         datetime.strptime(date_str, "%d.%m.%Y")
@@ -25,32 +26,33 @@ def to_string(amount,entry_type):
         return f" ${amount/100:>10,.2f}"
     elif entry_type == "expense":
         return f"-${abs(amount)/100:>10,.2f}"
+    else:
+        raise ValueError (f"Unknown entry type {entry_type}")
 # set up paser
 parser=argparse.ArgumentParser(description="Track your budget from the command line")
 subparsers=parser.add_subparsers(dest="command")
+subparsers.required=True
 # Set up add paser
-add_parser=subparsers.add_parser("add",help="Add a budget to the database")
+add_parser=subparsers.add_parser("add",help="Add an income or expense to the database")
 add_parser.add_argument("--amount","-a",type=to_int,required=True,help="Amount to add")
 add_parser.add_argument("--category","-c",type=str,required=True,help="Category to add")
 add_parser.add_argument("-n","--note",type=str,help="Note to add")
 add_parser.add_argument("-d","--date",type=parse_date,help="Date to add")
-add_parser.add_argument("-t","--type",choices=["income","expense"],required=True,help="income or expense")
+add_parser.add_argument("-t","--entry_type",choices=["income","expense"],required=True,help="type must be income or expense")
 #Set up list paser
-list_parser=subparsers.add_parser("list",help="List all budgets")
-list_parser.add_argument("-c","--category",)
+list_parser=subparsers.add_parser("list",help="List all items in the database")
+list_parser.add_argument("-c","--category",help="Filter by category")
 list_parser.add_argument("-f","--date_from",type=parse_date,help="From date")
 list_parser.add_argument("--date_to",type=parse_date,help="To date")
-list_parser.add_argument("-t","--type",choices=["income","expense"],help="income or expense")
+list_parser.add_argument("-t","--entry_type",choices=["income","expense"],help="income or expense")
 #Set up summary parser
-summary_parser=subparsers.add_parser("summary",help="Summarize a budget")
-summary_parser.add_argument("-m","--month",choices=range(1,13), type=int,help="Month to add")
-summary_parser.add_argument("-y","--year",type=int,help="Year to add")
+summary_parser=subparsers.add_parser("summary",help="Summarize a month's spending habits")
+summary_parser.add_argument("-m","--month",choices=range(1,13), type=int,help="Month to summarize. defaults to current month")
+summary_parser.add_argument("-y","--year",type=int,help="Year of month to summarize. defaults to current year")
 
 args=parser.parse_args()
 
-if args.command is None:
-    parser.print_help()
-    exit()
+
 
 conn = sqlite3.connect("budget.db")
 cursor = conn.cursor()
@@ -61,22 +63,28 @@ amount INTEGER NOT NULL,
 category TEXT NOT NULL,
 note TEXT,
 date TEXT NOT NULL,
-type TEXT NOT NULL
+entry_type TEXT CHECK (entry_type in ('income','expense'))NOT NULL
 )
 """)
+conn.close()
 
 if args.command=="add":
+    conn = sqlite3.connect("budget.db")
+    cursor = conn.cursor()
     if args.date is None:
         args.date = datetime.now().strftime("%Y-%m-%d")
     cursor.execute(
-        "INSERT INTO entries (amount, category, note, date, type) VALUES (?,?,?,?,?)",
-        (args.amount, args.category, args.note, args.date, args.type)
+        "INSERT INTO entries (amount, category, note, date, entry_type) VALUES (?,?,?,?,?)",
+        (args.amount, args.category, args.note, args.date, args.entry_type)
     )
+    print (f"Added {to_string(args.amount,args.entry_type)} {args.category} {args.note} {from_iso(args.date)} {args.entry_type}")
     conn.commit()
     conn.close()
 
 elif args.command=="list":
-    query = "SELECT id,amount, category, note, date, type FROM entries"
+    conn = sqlite3.connect("budget.db")
+    cursor = conn.cursor()
+    query = "SELECT id,amount, category, note, date, entry_type FROM entries"
     conditions=[]
     params=[]
     if args.category:
@@ -88,19 +96,19 @@ elif args.command=="list":
     if args.date_to:
         conditions.append("date<=?")
         params.append(args.date_to)
-    if args.type:
-        conditions.append("type=?")
-        params.append(args.type)
+    if args.entry_type:
+        conditions.append("entry_type=?")
+        params.append(args.entry_type)
     if conditions:
         query+=" WHERE "+" AND ".join(conditions)
-    query+=" ORDER BY date DESC"
+    query+=" ORDER BY date DESC, id DESC"
 
     cursor.execute(query,params)
     rows = cursor.fetchall()
 
 
     if not rows:
-        print("No entries found.")
+        print(f"No entries found matching criteria {params}")
     else:
         print(f"{'ID':<4}{' AMOUNT':<12} {'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
         print("-" * 68)
@@ -114,6 +122,8 @@ elif args.command=="list":
     conn.close()
 
 elif args.command=="summary":
+    conn = sqlite3.connect("budget.db")
+    cursor = conn.cursor()
     if not args.year:
         args.year = datetime.now().year
     if not args.month:
@@ -130,10 +140,10 @@ elif args.command=="summary":
     date_filter="date>=? AND date<?"
     date_params=[start_date,end_date]
 
-    query=f"SELECT SUM(amount) FROM entries WHERE {date_filter} AND type='income'"
+    query=f"SELECT SUM(amount) FROM entries WHERE {date_filter} AND entry_type='income'"
     cursor.execute(query,date_params)
     net_income = cursor.fetchone()[0] or 0
-    query=f"SELECT SUM(amount) FROM entries WHERE {date_filter} AND type='expense'"
+    query=f"SELECT SUM(amount) FROM entries WHERE {date_filter} AND entry_type='expense'"
     cursor.execute(query,date_params)
     net_expense = cursor.fetchone()[0] or 0
     net_total = net_income - net_expense
@@ -152,11 +162,11 @@ elif args.command=="summary":
     print (f"{'INCOME':<13}{to_string(net_income,'income')}\n{'EXPENSES':<13}{to_string(net_expense,'income')}")
     print (f"{'BALANCE':<13}{to_string(net_total,entry_type)}")
 
-    query=f"SELECT category, SUM(amount) FROM entries WHERE {date_filter} AND type='expense' GROUP BY category ORDER BY SUM(amount) DESC"
+    query=f"SELECT category, SUM(amount) FROM entries WHERE {date_filter} AND entry_type='expense' GROUP BY category ORDER BY SUM(amount) DESC"
     cursor.execute(query,date_params)
     rows = cursor.fetchall()
     if not rows:
-        print("No entries found.")
+        print("No expenses found for this period.")
     else:
         print("-" * 25)
         print("EXPENSES \n")
