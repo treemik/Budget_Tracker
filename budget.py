@@ -87,38 +87,48 @@ elif args.command=="list":
     query = "SELECT id,amount, category, note, date, entry_type FROM entries"
     conditions=[]
     params=[]
+    output=[]
     if args.category:
         conditions.append("category=?")
         params.append(args.category)
+        output.append("Category - "+args.category)
     if args.date_from:
         conditions.append("date>=?")
         params.append(args.date_from)
+        output.append(", From - "+from_iso(args.date_from))
     if args.date_to:
         conditions.append("date<=?")
         params.append(args.date_to)
+        output.append(", To - "+from_iso(args.date_to))
     if args.entry_type:
         conditions.append("entry_type=?")
         params.append(args.entry_type)
+        output.append(", Entry Type - "+args.entry_type)
     if conditions:
         query+=" WHERE "+" AND ".join(conditions)
     query+=" ORDER BY date DESC, id DESC"
-
+    out=" ".join(output)
     cursor.execute(query,params)
     rows = cursor.fetchall()
 
 
+
+
     if not rows:
-        print(f"No entries found matching criteria {params}")
+        print(f"No entries found matching search criteria {out}")
     else:
         print(f"{'ID':<4}{' AMOUNT':<12} {'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
-        print("-" * 68)
+        print("-" * 69)
+        print(f"Entries found matching search criteria {out}")
+        print("-" * 69)
+        quantity=0
         for row in rows:
-
+            quantity+=1
             id, amount, category, note, date, entry_type = row
 
-
-
             print(f"{id:<4}{to_string(amount,entry_type)} {category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
+        print("-"*69)
+        print(f"\n{quantity} results found.")
     conn.close()
 
 elif args.command=="summary":
