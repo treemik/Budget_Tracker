@@ -73,11 +73,15 @@ if args.command=="add":
     cursor = conn.cursor()
     if args.date is None:
         args.date = datetime.now().strftime("%Y-%m-%d")
+    cat=args.category.lower()
+    amount=abs(args.amount)
+    if amount == 0:
+        parser.error("Amount cannot be zero")
     cursor.execute(
         "INSERT INTO entries (amount, category, note, date, entry_type) VALUES (?,?,?,?,?)",
-        (args.amount, args.category, args.note, args.date, args.entry_type)
+        (amount, cat, args.note, args.date, args.entry_type)
     )
-    print (f"Added {to_string(args.amount,args.entry_type)} {args.category} {args.note} {from_iso(args.date)} {args.entry_type}")
+    print (f"\nAdded {to_string(amount,args.entry_type)} {cat} {args.note or ''} {from_iso(args.date)} {args.entry_type.capitalize()}\n")
     conn.commit()
     conn.close()
 
@@ -90,7 +94,7 @@ elif args.command=="list":
     output=[]
     if args.category:
         conditions.append("category=?")
-        params.append(args.category)
+        params.append(args.category.lower())
         output.append("Category - "+args.category)
     if args.date_from:
         conditions.append("date>=?")
@@ -107,7 +111,7 @@ elif args.command=="list":
     if conditions:
         query+=" WHERE "+" AND ".join(conditions)
     query+=" ORDER BY date DESC, id DESC"
-    out=" ".join(output)
+    out="".join(output)
     cursor.execute(query,params)
     rows = cursor.fetchall()
 
@@ -117,16 +121,22 @@ elif args.command=="list":
     if not rows:
         print(f"No entries found matching search criteria {out}")
     else:
+        if out == "":
+            print("\nAll entries")
+        else:
+            print(f"\nEntries found matching search criteria {out}")
+
+        print("-"*69)
         print(f"{'ID':<4}{' AMOUNT':<12} {'CATEGORY':<13}{'NOTE':<20}{'DATE':<12}{'TYPE'}")
         print("-" * 69)
-        print(f"Entries found matching search criteria {out}")
-        print("-" * 69)
+
+
         quantity=0
         for row in rows:
             quantity+=1
             id, amount, category, note, date, entry_type = row
 
-            print(f"{id:<4}{to_string(amount,entry_type)} {category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type}")
+            print(f"{id:<4}{to_string(amount,entry_type)} {category[:12]:<13}{note or '':<20}{from_iso(date):<12}{entry_type.capitalize()}")
         print("-"*69)
         print(f"\n{quantity} results found.")
     conn.close()
@@ -144,9 +154,12 @@ elif args.command=="summary":
         end_date=datetime(args.year,args.month+1,1)
     elif args.month==12:
         end_date=datetime(args.year+1,1,1)
+    if start_date>end_date:
+        parser.error("Start date must be before end date")
     summary_month = start_date.strftime("%B %Y")
     start_date=start_date.strftime("%Y-%m-%d")
     end_date=end_date.strftime("%Y-%m-%d")
+
     date_filter="date>=? AND date<?"
     date_params=[start_date,end_date]
 
